@@ -14,14 +14,17 @@ RAISE_PIT_VELOCITY = 2.0
 labRoom = viz.addChild("NewVersion.OSGB")
 viz.go()
 
+vizsonic.setReverb(6.0, 0.2, 0.5, 0.9, 0.0)
+vizsonic.setSimulatedRoomRadius(6.5,4.5)
+
 hmd = steamvr.HMD()
 navigationNode = viz.addGroup()
 viewLink = viz.link(navigationNode, viz.MainView)
 viewLink.preMultLinkable(hmd.getSensor())
 
 vrpn = viz.add('vrpn7.dle')
-rightFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,1)
-leftFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,2)
+rightFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,5)
+leftFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,4)
 
 floorOpened = False
 checkForFallTimer = None
@@ -45,28 +48,31 @@ def openFloor():
 	carpetCorner1 = labRoom.getChild("CarpetCorner1")
 	floorCorner1 = labRoom.getChild("FloorCorner1")
 	viz.link(floorCorner1, carpetCorner1)
-	moveAction = vizact.move(1.1,0,0,time=3)
+	moveAction = vizact.move(0.66,0,0,time=5)
 	floorCorner1.addAction(moveAction)
 	
 	carpetCorner2 = labRoom.getChild("CarpetCorner2")
 	floorCorner2 = labRoom.getChild("FloorCorner2")
 	viz.link(floorCorner2, carpetCorner2)
-	floorCorner2.addAction(vizact.move(0,0,-1.1,time=3))
+	floorCorner2.addAction(vizact.move(0,0,-0.66,time=5))
 	
 	carpetCorner3 = labRoom.getChild("CarpetCorner3")
 	floorCorner3 = labRoom.getChild("FloorCorner3")
 	viz.link(floorCorner3, carpetCorner3)
-	floorCorner3.addAction(vizact.move(-1.1,0,0,time=3))
+	floorCorner3.addAction(vizact.move(-0.66,0,0,time=5))
 	
 	carpetCorner4 = labRoom.getChild("CarpetCorner4")
 	floorCorner4 = labRoom.getChild("FloorCorner4")
 	viz.link(floorCorner4, carpetCorner4)
-	floorCorner4.addAction(vizact.move(0,0,1.1,time=3))
+	floorCorner4.addAction(vizact.move(0,0,0.66,time=5))
+	
+	FLOOR_OPENING_SOUND.play()
 	
 	global floorOpened
 	floorOpened = True
 
 	yield viztask.waitActionEnd(floorCorner1, moveAction)
+	global checkForFallTimer
 	checkForFallTimer = vizact.ontimer(0, checkForFall)
 
 
@@ -86,7 +92,7 @@ def checkForFall():
 	if (not floorOpened) or userOnPlank or userOnSurroundingGround:
 		return
 	# Floor is open and user is not on plank or surrounding ground, so user should fall
-	checkForFall.setEnabled(viz.OFF)
+	checkForFallTimer.setEnabled(viz.OFF)
 	makeUserFall()
 	
 def checkUserOnPlank():
@@ -113,7 +119,7 @@ def makeUserFall():
 	pitBoundingBox = labRoom.getChild('pit').getBoundingBox()
 	
 	global distanceToFall, velocity, totalDistanceFallen
-	distanceToFall = -pitBoundingBox.ymin
+	distanceToFall = -pitBoundingBox.ymin - 1
 	velocity = 0.0
 	totalDistanceFallen = 0.0
 	
