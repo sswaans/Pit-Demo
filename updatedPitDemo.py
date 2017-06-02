@@ -10,6 +10,8 @@ PPT_HOSTNAME = '171.64.33.43'
 GRAVITY_CONSTANT = 9.8
 TERMINAL_VELOCITY = 60.0
 RAISE_PIT_VELOCITY = 2.0
+RAISE_PLATFORM_VELOCITY = 2.0
+PLATFORM_MAX_HEIGHT = 30.0
 
 labRoom = viz.addChild("NewVersion.OSGB")
 viz.go()
@@ -157,29 +159,64 @@ def raisePit():
 	timeToRaisePit = (-pitFloor.getBoundingBox().ymax) / RAISE_PIT_VELOCITY
 	pitFloor.addAction(vizact.move([0,RAISE_PIT_VELOCITY], timeToRaisePit))
 	
-	global totalDistanceRisen, distanceToRise
-	totalDistanceRisen = 0.0
-	distanceToRise = pitFloor.getBoundingBox().ymax
+	global totalDistanceRisenPit, distanceToRisePit
+	totalDistanceRisenPit = 0.0
+	distanceToRisePit = pitFloor.getBoundingBox().ymax
 	
-	riseTimer = vizact.ontimer(0, updateRisePosition)
+	riseTimerPit = vizact.ontimer(0, updateRisePositionPit)
 #	ELEVATOR_START_SOUND.play()
 	# Wait for start sound to finish somehow
 	#ELEVATOR_RISE_SOUND.loop()
 	print "NYERRRR"
 
-def updateRisePosition():
-	global totalDistanceRisen
+def updateRisePositionPit():
+	global totalDistanceRisenPit
 	dt = viz.getFrameElapsed()
 	riseDistance = RAISE_PIT_VELOCITY * dt
 	curPosition = navigationNode.getPosition()
 	nextPosition = [curPosition[0], curPosition[1] + riseDistance, curPosition[2]]
 	
 	# Don't let user rise above the floor, clamp rising at floor
-	if totalDistanceRisen + riseDistance > distanceToRise:
-		distanceLeftToRise = distanceToRise - totalDistanceRisen
+	if totalDistanceRisenPit + riseDistance > distanceToRisePit:
+		distanceLeftToRise = distanceToRisePit - totalDistanceRisenPit
 		nextPosition[1] = curPosition[1] + distanceLeftToRise
 		# Stop rising
-		riseTimer.setEnabled(viz.OFF)
+		riseTimerPit.setEnabled(viz.OFF)
+		#ELEVATOR_RISE_SOUND.stop()
+		#ELEVATOR_STOP_SOUND.play()
+		print "KADUNK"
+		
+	# User hasn't risen all the way up yet
+	navigationNode.setPosition(nextPosition)
+	totalDistanceRisenPit += riseDistance
+	
+def raisePlatform():
+	platform = labRoom.getChild('Platform')
+	stand = labRoom.getChild('Stand')
+	viz.link(platform, stand)
+	
+	timeToRaisePlatform = PLATFORM_MAX_HEIGHT / RAISE_PLATFORM_VELOCITY
+	platform.addAction(vizact.move([0,RAISE_PLATFORM_VELOCITY], timeToRaisePlatform))
+	
+	global totalDistanceRisenPlatform, distanceToRisePlatform
+	totalDistanceRisenPlatform = 0.0
+	distanceToRisePlatform = PLATFORM_MAX_HEIGHT
+	
+	riseTimerPlatform = vizact.ontimer(0, updateRisePositionPlatform)
+	
+def updateRisePositionPlatform():
+	global totalDistanceRisenPlatform
+	dt = viz.getFrameElapsed()
+	riseDistance = RAISE_PIT_VELOCITY * dt
+	curPosition = navigationNode.getPosition()
+	nextPosition = [curPosition[0], curPosition[1] + riseDistance, curPosition[2]]
+	
+	# Don't let user rise above max height
+	if totalDistanceRisenPlatform + riseDistance > distanceToRisePlatform:
+		distanceLeftToRise = distanceToRisePlatform - totalDistanceRisenPlatform
+		nextPosition[1] = curPosition[1] + distanceLeftToRise
+		# Stop rising
+		riseTimerPlatform.setEnabled(viz.OFF)
 		#ELEVATOR_RISE_SOUND.stop()
 		#ELEVATOR_STOP_SOUND.play()
 		print "KADUNK"
@@ -189,7 +226,8 @@ def updateRisePosition():
 	totalDistanceRisen += riseDistance
 	
 	
+	
 vizact.onkeydown(" ", viztask.schedule,openFloor)
 vizact.onkeydown("q", openCeiling)
-vizact.onkeydown("w", makeUserFall)
+vizact.onkeydown("w", raisePlatform)
 vizact.onkeydown(viz.KEY_UP, raisePit)
