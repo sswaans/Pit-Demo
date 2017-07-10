@@ -11,9 +11,9 @@ GRAVITY_CONSTANT = 9.8
 TERMINAL_VELOCITY = 60.0
 RAISE_PIT_VELOCITY = 2.0
 RAISE_PLATFORM_VELOCITY = 2.0
-PLATFORM_MAX_HEIGHT = 30.0
+PLATFORM_MAX_HEIGHT = 15.0
 
-labRoom = viz.addChild("NewVersion.OSGB")
+labRoom = viz.addChild("scaledTest.OSGB")
 viz.go()
 
 vizsonic.setReverb(6.0, 0.2, 0.5, 0.9, 0.0)
@@ -23,11 +23,22 @@ hmd = steamvr.HMD()
 navigationNode = viz.addGroup()
 viewLink = viz.link(navigationNode, viz.MainView)
 viewLink.preMultLinkable(hmd.getSensor())
+headLight = viz.MainView.getHeadLight() 
+headLight.disable() 
 
 vrpn = viz.add('vrpn7.dle')
-rightFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,5)
+rightFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,3)
 leftFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,4)
+if rightFootTracker.valid():
+	print 'connection established with right foot tracker'
+else:
+	print 'right foot tracker failed'
 
+if leftFootTracker.valid():
+	print 'connection established with left foot tracker'
+else:
+	print 'left foot tracker failed'
+	
 floorOpened = False
 checkForFallTimer = None
 
@@ -38,35 +49,35 @@ WHOOSH_SOUND = navigationNode.playsound('Resources/Audio/swoosh.wav')
 WHOOSH_SOUND.stop()
 THUD_SOUND = navigationNode.playsound('Resources/Audio/body_crash.wav')
 THUD_SOUND.stop()
-#ELEVATOR_START_SOUND = labRoom.getChild('pitFloor').playsound('Resources/Audio/elevatorStart.wav')
-#ELEVATOR_START_SOUND.stop()
-#ELEVATOR_RISE_SOUND = labRoom.getChild('pitFloor').playsound('Resources/Audio/elevatorRunning.wav')
-#ELEVATOR_RISE_SOUND.stop()
-#ELEVATOR_STOP_SOUND = labRoom.getChild('pitFloor').playsound('Resources/Audio/elevatorStop.wav')
-#ELEVATOR_STOP_SOUND.stop()
+ELEVATOR_START_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorStart.wav')
+ELEVATOR_START_SOUND.stop()
+ELEVATOR_RISE_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorRunning.wav')
+ELEVATOR_RISE_SOUND.stop()
+ELEVATOR_STOP_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorStop.wav')
+ELEVATOR_STOP_SOUND.stop()
 
 
 def openFloor():
 	carpetCorner1 = labRoom.getChild("CarpetCorner1")
 	floorCorner1 = labRoom.getChild("FloorCorner1")
 	viz.link(floorCorner1, carpetCorner1)
-	moveAction = vizact.move(0.66,0,0,time=5)
+	moveAction = vizact.move(0.7,0,0,time=5)
 	floorCorner1.addAction(moveAction)
 	
 	carpetCorner2 = labRoom.getChild("CarpetCorner2")
 	floorCorner2 = labRoom.getChild("FloorCorner2")
 	viz.link(floorCorner2, carpetCorner2)
-	floorCorner2.addAction(vizact.move(0,0,-0.66,time=5))
+	floorCorner2.addAction(vizact.move(0,0,-0.7,time=5))
 	
 	carpetCorner3 = labRoom.getChild("CarpetCorner3")
 	floorCorner3 = labRoom.getChild("FloorCorner3")
 	viz.link(floorCorner3, carpetCorner3)
-	floorCorner3.addAction(vizact.move(-0.66,0,0,time=5))
+	floorCorner3.addAction(vizact.move(-0.7,0,0,time=5))
 	
 	carpetCorner4 = labRoom.getChild("CarpetCorner4")
 	floorCorner4 = labRoom.getChild("FloorCorner4")
 	viz.link(floorCorner4, carpetCorner4)
-	floorCorner4.addAction(vizact.move(0,0,0.66,time=5))
+	floorCorner4.addAction(vizact.move(0,0,0.7,time=5))
 	
 	FLOOR_OPENING_SOUND.play()
 	
@@ -83,14 +94,27 @@ def openCeiling():
 	leftLights = labRoom.getTransform("LightsLeft")
 	rightLights = labRoom.getTransform("LightsRight")
 	leftPiece = labRoom.getTransform("RoofLeft")
-	rightPiece = labRoom.getTransform("RoofRight")
+	rightPiece = labRoom.getTransform("roofRight")
 
 	rightPiece.addAction(vizact.spin(0,0,1,-20,10.5))
 	leftPiece.addAction(vizact.spin(0,0,1,20,10.5))
 	
 def checkForFall():
+	print 'feetpos:'
+	print leftFootTracker.getPosition()
+	print rightFootTracker.getPosition()
+	print labRoom.getChild('Platform').getBoundingBox()
 	userOnPlank = checkUserOnPlank()
 	userOnSurroundingGround = checkUserOnSurroundingGround()
+	if floorOpened:
+		print 'floorOpened!'
+	
+	if userOnPlank:
+		print 'UserOnPlank!'
+		
+	if userOnSurroundingGround:
+		print 'UserOnSurroundingGround!'
+	
 	if (not floorOpened) or userOnPlank or userOnSurroundingGround:
 		return
 	# Floor is open and user is not on plank or surrounding ground, so user should fall
@@ -112,6 +136,9 @@ def checkUserOnSurroundingGround():
 
 def isAboveObject(aboveObject, belowObject):
 	boundingBox = belowObject.getBoundingBox()
+	if belowObject is labRoom.getChild('pit'):
+		print 'XBounds', boundingBox.xmin, boundingBox.xmax
+		print 'ZBounds', boundingBox.zmin, boundingBox.zmax
 	if aboveObject.getPosition()[0] >= boundingBox.xmin and aboveObject.getPosition()[0] <= boundingBox.xmax:
 		if aboveObject.getPosition()[2] >= boundingBox.zmin and aboveObject.getPosition()[2] <= boundingBox.zmax:
 			return True
@@ -121,7 +148,7 @@ def makeUserFall():
 	pitBoundingBox = labRoom.getChild('pit').getBoundingBox()
 	
 	global distanceToFall, velocity, totalDistanceFallen
-	distanceToFall = -pitBoundingBox.ymin - 1
+	distanceToFall = -pitBoundingBox.ymin
 	velocity = 0.0
 	totalDistanceFallen = 0.0
 	
@@ -154,19 +181,17 @@ def updateFallPosition():
 	
 
 def raisePit():
-	# Placeholder until pit floor is separated in model
-#	pitFloor = labRoom.getChild("pitFloor")
+	pitFloor = labRoom.getChild("PitFloor")
 	timeToRaisePit = (-pitFloor.getBoundingBox().ymax) / RAISE_PIT_VELOCITY
 	pitFloor.addAction(vizact.move([0,RAISE_PIT_VELOCITY], timeToRaisePit))
 	
-	global totalDistanceRisenPit, distanceToRisePit
+	global totalDistanceRisenPit, distanceToRisePit, riseTimerPit
 	totalDistanceRisenPit = 0.0
-	distanceToRisePit = pitFloor.getBoundingBox().ymax
+	distanceToRisePit = -pitFloor.getBoundingBox().ymax
 	
 	riseTimerPit = vizact.ontimer(0, updateRisePositionPit)
-#	ELEVATOR_START_SOUND.play()
-	# Wait for start sound to finish somehow
-	#ELEVATOR_RISE_SOUND.loop()
+	ELEVATOR_START_SOUND.play()
+	ELEVATOR_RISE_SOUND.loop()
 	print "NYERRRR"
 
 def updateRisePositionPit():
@@ -182,8 +207,8 @@ def updateRisePositionPit():
 		nextPosition[1] = curPosition[1] + distanceLeftToRise
 		# Stop rising
 		riseTimerPit.setEnabled(viz.OFF)
-		#ELEVATOR_RISE_SOUND.stop()
-		#ELEVATOR_STOP_SOUND.play()
+		ELEVATOR_RISE_SOUND.stop()
+		ELEVATOR_STOP_SOUND.play()
 		print "KADUNK"
 		
 	# User hasn't risen all the way up yet
@@ -196,9 +221,9 @@ def raisePlatform():
 	viz.link(platform, stand)
 	
 	timeToRaisePlatform = PLATFORM_MAX_HEIGHT / RAISE_PLATFORM_VELOCITY
-	platform.addAction(vizact.move([0,RAISE_PLATFORM_VELOCITY], timeToRaisePlatform))
+	platform.addAction(vizact.move(0,RAISE_PLATFORM_VELOCITY, 0, timeToRaisePlatform))
 	
-	global totalDistanceRisenPlatform, distanceToRisePlatform
+	global totalDistanceRisenPlatform, distanceToRisePlatform, riseTimerPlatform
 	totalDistanceRisenPlatform = 0.0
 	distanceToRisePlatform = PLATFORM_MAX_HEIGHT
 	
@@ -217,17 +242,38 @@ def updateRisePositionPlatform():
 		nextPosition[1] = curPosition[1] + distanceLeftToRise
 		# Stop rising
 		riseTimerPlatform.setEnabled(viz.OFF)
-		#ELEVATOR_RISE_SOUND.stop()
-		#ELEVATOR_STOP_SOUND.play()
+		ELEVATOR_RISE_SOUND.stop()
+		ELEVATOR_STOP_SOUND.play()
 		print "KADUNK"
 		
 	# User hasn't risen all the way up yet
 	navigationNode.setPosition(nextPosition)
-	totalDistanceRisen += riseDistance
+	totalDistanceRisenPlatform += riseDistance
+	
+def WSADTracking(): 
+	view = viz.MainView	
+	if viz.key.isDown(viz.KEY_UP):
+		view.move([0,0,5*viz.elapsed()],viz.BODY_ORI)
+		navigationNode.setPosition([0, 0, 5*viz.elapsed()])
+		
+	elif viz.key.isDown(viz.KEY_DOWN):
+		view.move([0,0,-5*viz.elapsed()],viz.BODY_ORI)
+		navigationNode.setPosition([0, 0, -5*viz.elapsed()])
+		
+	elif viz.key.isDown(viz.KEY_RIGHT):
+		view.setEuler([10*viz.elapsed(),0,0],viz.BODY_ORI,viz.REL_PARENT)
+		navigationNode.setEuler([10*viz.elapsed(),0,0],viz.BODY_ORI,viz.REL_PARENT)
+		
+	elif viz.key.isDown(viz.KEY_LEFT):
+		view.setEuler([-10*viz.elapsed(),0,0],viz.BODY_ORI,viz.REL_PARENT)
+		navigationNode.setEuler([-10*viz.elapsed(),0,0],viz.BODY_ORI,viz.REL_PARENT)
+
+view = viz.MainView
+vizact.ontimer(0, WSADTracking)
 	
 	
 	
-vizact.onkeydown(" ", viztask.schedule,openFloor)
+vizact.onkeydown("f", viztask.schedule,openFloor)
 vizact.onkeydown("q", openCeiling)
-vizact.onkeydown("w", raisePlatform)
-vizact.onkeydown(viz.KEY_UP, raisePit)
+vizact.onkeydown("r", raisePit)
+vizact.onkeydown("e", raisePlatform)
