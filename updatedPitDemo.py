@@ -32,16 +32,7 @@ headLight.disable()
 vrpn = viz.add('vrpn7.dle')
 rightFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,3)
 leftFootTracker = vrpn.addTracker('PPT0@' + PPT_HOSTNAME,4)
-if rightFootTracker.valid():
-	print 'connection established with right foot tracker'
-else:
-	print 'right foot tracker failed'
 
-if leftFootTracker.valid():
-	print 'connection established with left foot tracker'
-else:
-	print 'left foot tracker failed'
-	
 floorOpened = False
 checkForFallTimer = None
 riseTimerPlatform = None
@@ -55,9 +46,9 @@ WHOOSH_SOUND = navigationNode.playsound('Resources/Audio/swoosh.wav')
 WHOOSH_SOUND.stop()
 THUD_SOUND = navigationNode.playsound('Resources/Audio/body_crash.wav')
 THUD_SOUND.stop()
-ELEVATOR_START_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorStart.wav')
+ELEVATOR_START_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorStart.wav', viz.LOOP)
 ELEVATOR_START_SOUND.stop()
-ELEVATOR_RISE_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorRunning.wav')
+ELEVATOR_RISE_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorRunning.wav', flag = viz.LOOP)
 ELEVATOR_RISE_SOUND.stop()
 ELEVATOR_STOP_SOUND = labRoom.getChild('PitFloor').playsound('Resources/Audio/elevatorStop.wav')
 ELEVATOR_STOP_SOUND.stop()
@@ -65,7 +56,7 @@ ELEVATOR_STOP_SOUND.stop()
 
 def openFloor():
 	
-	#set initial height; later used for buffer
+	#set initial height; later used as a buffer buffer
 	global INITIAL_HEIGHT
 	if INITIAL_HEIGHT == 0:
 		INITIAL_HEIGHT = viz.MainView.getPosition()[1]
@@ -89,33 +80,45 @@ def openFloor():
 	carpetCorner4 = labRoom.getChild("CarpetCorner4")
 	floorCorner4 = labRoom.getChild("FloorCorner4")
 	viz.link(floorCorner4, carpetCorner4)
-	floorCorner4.addAction(vizact.move(0,0,0.7,time=5))
+	floorCorner4.addAction(vizact.move(0,0,0.7,time=4))
 	
 	FLOOR_OPENING_SOUND.play()
 	
 	global floorOpened
 	floorOpened = True
 	
+	yield viztask.waitActionEnd(floorCorner1, moveAction)
+	
+	#make all the pieces invisible
+	carpetCorner1.visible(viz.OFF)
+	carpetCorner2.visible(viz.OFF)
+	carpetCorner3.visible(viz.OFF)
+	carpetCorner4.visible(viz.OFF)
 	floorCorner1.visible(viz.OFF)
 	floorCorner2.visible(viz.OFF)
 	floorCorner3.visible(viz.OFF)
 	floorCorner4.visible(viz.OFF)
 
-	yield viztask.waitActionEnd(floorCorner1, moveAction)
-	
+	#Timer to check if the user should fall
 	global checkForFallTimer
 	checkForFallTimer = vizact.ontimer(0, checkForFall)
 	print 'NUMBER 1'
 
 
 def openCeiling():
-	leftLights = labRoom.getTransform("LightsLeft")
-	rightLights = labRoom.getTransform("LightsRight")
-	leftPiece = labRoom.getTransform("RoofLeft")
-	rightPiece = labRoom.getTransform("roofRight")
+	FLOOR_OPENING_SOUND.play()
 
-	leftPiece.addAction(vizact.spin(0,0,1,20,10.5))
-	rightPiece.addAction(vizact.spin(0,0,1,20,10.5))
+	leftPiece = labRoom.getChild("RoofLeft")
+	rightPiece = labRoom.getChild("roofRight")
+	
+	moveCeiling = vizact.move(-1.5,0,0, 5)
+
+	leftPiece.addAction(moveCeiling)
+	rightPiece.addAction(vizact.move(1.5,0,0,5))
+	
+	yield viztask.waitActionEnd(leftPiece, moveCeiling)
+	leftPiece.visible(viz.OFF)
+	rightPiece.visible(viz.OFF)
 
 	
 def checkForFall():
@@ -123,7 +126,8 @@ def checkForFall():
 	userOnPlatform = checkUserOnPlatform()
 	userOnSurroundingGround = checkUserOnSurroundingGround()
 	
-	if platformRaised and not checkUserOnPlatform():
+	#If the platform is ascending and the user is not on the platform or the plank
+	if platformRaised and not userOnPlatform:
 		if platformLevel is not 0 and not userOnPlank:
 			checkForFallTimer.setEnabled(viz.OFF)
 			print 'something went wrong with the platforms'
@@ -132,75 +136,79 @@ def checkForFall():
 		
 	if (not floorOpened) or userOnPlatform or userOnPlank or userOnSurroundingGround:
 		return
+		
+	print 'platform=', userOnPlatform
+		
 	# Floor is open and user is not on plank or surrounding ground, so user should fall
 	checkForFallTimer.setEnabled(viz.OFF)
 	print 'something went wrong with the normal'
 	makeUserFall()
 	
-def checkUserOnPlatform():
+#Simple helper function for the booleans
+def checkUserOnObject(head, rightFoot, leftFoot):
+	if (rightFoot and leftFoot) or (head and rightFoot) or (head and leftFoot):
+		return True
+	else:
+		return False
+		
+def checkUserOnPlatform():	
+	platform = labRoom.getChild('Platform')
 	headLoc = viz.MainView
-	rightFootOnPlatform = isOnObject(rightFootTracker,labRoom.getChild('Platform'))
-	leftFootOnPlatform = isOnObject(leftFootTracker,labRoom.getChild('Platform'))
-
-	headOnPlatform = isOnObject(headLoc, labRoom.getChild('Platform'))
-	if headOnPlatform:
-		print 'on Platform'
-	return headOnPlatform
+	rightFootOnPlatform = isOnObject(rightFootTracker,platform)
+	leftFootOnPlatform = isOnObject(leftFootTracker,platform)
+	headOnPlatform = isOnObject(headLoc, platform)
+		
+	return checkUserOnObject(headOnPlatform, rightFootOnPlatform, leftFootOnPlatform) and isUserAboveObject(platform)
 
 
 	
 def checkUserOnPlank():
-	rightFootOnPlank = isOnObject(rightFootTracker,labRoom.getChild('Plank'))
-	leftFootOnPlank = isOnObject(leftFootTracker,labRoom.getChild('Plank'))
-	
+	plank = labRoom.getChild('Plank')
+	rightFootOnPlank = isOnObject(rightFootTracker,plank)
+	leftFootOnPlank = isOnObject(leftFootTracker,plank)
 	headLoc = viz.MainView
-	headOnPlank = isOnObject(headLoc, labRoom.getChild('Plank'))
-#	return ((rightFootOnPlank or rightFootOnPlatform) or (leftFootOnPlank or leftFootOnPlatform)) and (headOnPlank or headOnPlatform)
-	return headOnPlank
+	headOnPlank = isOnObject(headLoc, plank)
+	
+	return checkUserOnObject(headOnPlank, rightFootOnPlank, leftFootOnPlank) and isUserAboveObject(plank)
 
 	
 def checkUserOnSurroundingGround():
-	rightFootOnGround = not isAboveObject(rightFootTracker,labRoom.getChild('pit'))	
-	leftFootOnGround = not isAboveObject(leftFootTracker,labRoom.getChild('pit'))
-	headOnGround = not isAboveObject(viz.MainView, labRoom.getChild('pit'))
-	#return (rightFootOnGround or leftFootOnGround) and headOnGround
-	return headOnGround
+	rightFootOnGround = not isOnObject(rightFootTracker,labRoom.getChild('pit'))	
+	leftFootOnGround = not isOnObject(leftFootTracker,labRoom.getChild('pit'))
+	headOnGround = not isOnObject(viz.MainView, labRoom.getChild('pit'))
+	return checkUserOnObject(headOnGround, rightFootOnGround, leftFootOnGround)
 
+#Returns True if the user is in the bounds of the object in the X and Y coordinates
 def isOnObject(aboveObject, belowObject):
 	boundingBox = belowObject.getBoundingBox()
-	buffer = INITIAL_HEIGHT 
-
-	if isAboveObject(aboveObject, belowObject):
-		if aboveObject.getPosition()[1] > boundingBox.ymax and aboveObject.getPosition()[1] < boundingBox.ymax+buffer:
-			return True
-		
-	return False
-	
-def isAboveObject(aboveObject, belowObject):
-	boundingBox = belowObject.getBoundingBox()
-
+			
 	if aboveObject.getPosition()[0] >= boundingBox.xmin and aboveObject.getPosition()[0] <= boundingBox.xmax:
 		if aboveObject.getPosition()[2] >= boundingBox.zmin and aboveObject.getPosition()[2] <= boundingBox.zmax:
-				return True
+			return True
+
 	return False
-	
+
+#Returns True if the user is within reasonable heights above the object
+def isUserAboveObject(belowObject):
+	boundingBox = belowObject.getBoundingBox()
+	userHeight = viz.MainView.getPosition()[1]
+	buffer = INITIAL_HEIGHT + .2
+
+	if userHeight > boundingBox.ymax and userHeight < boundingBox.ymax+buffer:
+		return True
+	else:
+		return False
+
+#Checks to see if the user falls on anything during fall
 def checkFallingOnObject():
 	global checkForFallTimer
 	userOnPlank = checkUserOnPlank()
 	userOnPlatform = checkUserOnPlatform()
 	userOnSurroundingGround = checkUserOnSurroundingGround()
 	
-	if userOnPlank:
-		print 'plank'
-	if userOnSurroundingGround:
-		print 'surroundingGround'
-	if userOnPlatform: 
-		print 'platform'
-	
-	
 	if userOnPlank or userOnPlatform or userOnSurroundingGround:
 		fallTimer.setEnabled(viz.OFF)
-		THUD_SOUND.play()
+		#THUD_SOUND.play()
 		collidingObjectTimer.setEnabled(viz.OFF)
 		
 		if not checkForFallTimer.getEnabled():
@@ -257,7 +265,7 @@ def raisePit():
 	
 	riseTimerPit = vizact.ontimer(0, updateRisePositionPit)
 	ELEVATOR_START_SOUND.play()
-	ELEVATOR_RISE_SOUND.loop()
+	pitFloor.playsound('Resources/Audio/elevatorRunning.wav', viz.LOOP)
 	print "NYERRRR"
 
 
@@ -296,23 +304,37 @@ def lowerPlatform():
 	viz.link(platform, stand)
 	
 	timeToLowerPlatform = PLATFORM_MAX_HEIGHT/RAISE_PLATFORM_VELOCITY
-	platform.addAction(vizact.move([0, -0.9, 0], timeToLowerPlatform))
+	
+	ELEVATOR_START_SOUND.play()
+	pit.playsound('Resources/Audio/elevatorRunning.wav', viz.LOOP)
+	lower = vizact.move([0, -0.9, 0], timeToLowerPlatform)
+	platform.addAction(lower)
+	yield viztask.waitActionEnd(platform, lower)
+	pit.playsound('Resources/Audio/elevatorRunning.wav', viz.PAUSE)
+	ELEVATOR_STOP_SOUND.play()
+	
+	
 	
 	
 def raisePlatform():
+	
+	pit = labRoom.getChild('PitFloor')
+	
+	#Make buffer height if not set already
 	global INITIAL_HEIGHT
 	if INITIAL_HEIGHT == 0:
 		INITIAL_HEIGHT = viz.MainView.getPosition()[1]	
 	
 	global platformLevel
 	global totalDistanceRisenPlatform, distanceToRisePlatform, riseTimerPlatform
-
+	totalDistanceRisenPlatform = 0.0
+	distanceToRisePlatform = 6.75
+	
+	#if platform is at the highest level, or the platform is already rising, return
 	if riseTimerPlatform is not None:
 		if platformLevel == 1 or riseTimerPlatform.getEnabled():
 			return
-	
 	platformLevel = platformLevel + 1
-	
 	
 	platform = labRoom.getChild('Platform')
 	stand = labRoom.getChild('Stand')
@@ -320,23 +342,31 @@ def raisePlatform():
 	viz.link(platform, stand)
 	
 	timeToRaisePlatform = PLATFORM_MAX_HEIGHT / RAISE_PLATFORM_VELOCITY
-	platform.addAction(vizact.move(0, .9, 0, timeToRaisePlatform))
-	
-	totalDistanceRisenPlatform = 0.0
-	distanceToRisePlatform = 6.75
-	
+
 	#If the user is on the platform, and not already checking for fall, check for fall.
 	if platform.getPosition()[1] < mainview.getPosition()[1] and isOnObject(mainview, platform):
 		riseTimerPlatform = vizact.ontimer(0, updateRisePositionPlatform)
 		
-		global platformRaised
+		global platformRaised, checkForFallTimer
 		platformRaised = True
 		
-		global checkForFallTimer
 		if not checkForFallTimer.getEnabled():
 			checkForFallTimer = vizact.ontimer(0, checkForFall)
+			
+	ELEVATOR_START_SOUND.play()
+	pit.playsound('Resources/Audio/elevatorRunning.wav', viz.LOOP)
+	raisePlatform = vizact.move(0, .9, 0, timeToRaisePlatform)
+	platform.addAction(raisePlatform)
+	yield viztask.waitActionEnd(platform, raisePlatform)
+	pit.playsound('Resources/Audio/elevatorRunning.wav', viz.STOP)
+	ELEVATOR_STOP_SOUND.play()
+		
 	
 def updateRisePositionPlatform():
+
+	pit = labRoom.getChild('PitFloor')
+
+	
 	global totalDistanceRisenPlatform
 	global checkForFallTimer
 	dt = viz.getFrameElapsed()
@@ -355,7 +385,7 @@ def updateRisePositionPlatform():
 		nextPosition[1] = curPosition[1] + distanceLeftToRise
 		# Stop rising
 		riseTimerPlatform.setEnabled(viz.OFF)
-		ELEVATOR_RISE_SOUND.stop()
+		pit.playsound('Resources/Audio/elevatorRunning.wav', viz.PAUSE)
 		ELEVATOR_STOP_SOUND.play()
 		print "KADUNK"
 		
@@ -366,7 +396,7 @@ def updateRisePositionPlatform():
 view = viz.MainView	
 	
 vizact.onkeydown("f", viztask.schedule,openFloor)
-vizact.onkeydown("q", openCeiling)
+vizact.onkeydown("q", viztask.schedule, openCeiling)
 vizact.onkeydown("r", raisePit)
-vizact.onkeydown("e", raisePlatform)
-vizact.onkeydown("g", lowerPlatform)
+vizact.onkeydown("e", viztask.schedule, raisePlatform)
+vizact.onkeydown("g", viztask.schedule, lowerPlatform)
